@@ -15,6 +15,7 @@
 #include <string>
 #include <cmath>
 #include <iomanip>
+#include <vector>
 
 using namespace std;
 
@@ -29,6 +30,7 @@ void usage() {
   cout << "time:\n";
   cout << "\tnumber followed by 'h' for hours\n";
   cout << "\tnumber followed by 'm' for minutes\n";
+  cout << "\thh:mm format, e.g. 3:30\n";
   cout << "PACE MODE: `pace 4:30k`\n";
   cout << "Usage: pace [pace]\n";
   cout << "pace:\n";
@@ -64,6 +66,15 @@ void display_distances(float pace) {
   cout << "\t5k:\t\t" << fmt_time(5 * pace) << '\n';
 }
 
+void split(const string &s, char delim, vector<string> &elems) {
+    stringstream ss;
+    ss.str(s);
+    string item;
+    while (getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+}
+
 int do_distance(string d_raw, string t_raw) {
 
   if (d_raw == "marathon") {
@@ -85,15 +96,26 @@ int do_distance(string d_raw, string t_raw) {
     return 1;
   }
 
-  char time_unit = t_raw[t_raw.size()-1];
-  float time = stof(t_raw);
-  if (time_unit == 'h') {
-    time = time * 60;
-  } else if (time_unit == 's') {
-    time = time / 60;
-  } else if (time_unit != 'm') {
-    cout << "Invalid time unit '" << time_unit << "'. Must be h, m or s\n";
-    return 1;
+  float time = 0;
+  if (t_raw.find(":") != std::string::npos) {
+		vector<string> parts;
+    split(t_raw, ':', parts);
+    if (parts.size() != 2) {
+      cout << "Invalid time '"<< time << "'. Expected hh:mm like 3:30\n";
+      return 1;
+    }
+    time = stof(parts[0]) * 60 + stof(parts[1]);
+  } else {
+    char time_unit = t_raw[t_raw.size()-1];
+    time = stof(t_raw);
+    if (time_unit == 'h') {
+      time = time * 60;
+    } else if (time_unit == 's') {
+      time = time / 60;
+    } else if (time_unit != 'm') {
+      cout << "Invalid time unit '" << time_unit << "'. Must be h, m or s\n";
+      return 1;
+    }
   }
 
   float result_k = time / dist_k;
