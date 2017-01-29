@@ -60,6 +60,7 @@ string fmt_time(float raw_time) {
 
 void display_distances(float pace) {
   cout << "At that pace:\n";
+  cout << "\t50k:\t\t" << fmt_time(50 * pace) << '\n';
   cout << "\tMarathon:\t" << fmt_time(42.2 * pace) << '\n';
   cout << "\tHalf-Marathon:\t" << fmt_time(21.1 * pace) << '\n';
   cout << "\t10k:\t\t" << fmt_time(10 * pace) << '\n';
