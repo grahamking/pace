@@ -34,8 +34,48 @@ fn usage() {
     print!("\tmins:secs followed by 'm' for per mile, e.g. 7:00m\n");
 }
 
-fn do_distance(d_raw: &str, t_raw: &str) {
-    println!("do_distance: {} {}", d_raw, t_raw);
+// d_raw_param: The distance, one of:
+//  - "marathon" or "half"
+//  - "<number>k", e.g. "5k"
+//  - "<number>m", e.g "26.2m"
+//  t_raw_param: The time, in format 1h05m10s, all parts optional.
+fn do_distance(d_raw_param: &str, t_raw_param: &str) {
+    let d_raw = if d_raw_param == "marathon" {
+        "42.2k"
+    } else if d_raw_param == "half" {
+        "21.1k"
+    } else {
+        d_raw_param
+    };
+    let c = d_raw.chars().last().unwrap();
+    let du = match c {
+        'm' => DistUnit::Miles,
+        'k' => DistUnit::Kilometers,
+        x => {
+            println!("Invalid distance unit '{}'. Must be 'k' or 'm'", x);
+            return;
+        }
+    };
+    let dist_k: f64;
+    let dist_m: f64;
+    match du {
+        DistUnit::Miles => {
+            dist_m = d_raw[0..d_raw.len() - 1].parse().unwrap();
+            dist_k = dist_m * 1.609;
+        }
+        DistUnit::Kilometers => {
+            dist_k = d_raw[0..d_raw.len() - 1].parse().unwrap();
+            dist_m = dist_k * 0.62137119;
+        }
+    }
+
+    let sec = f64::from(t_to_sec(t_raw_param));
+    let sec_k = sec / dist_k;
+    let sec_m = sec / dist_m;
+
+    println!("{:.2} km / {:.2} miles in {}:", dist_k, dist_m, t_raw_param);
+    println!("\t{} / km", sec_to_string(sec_k));
+    println!("\t{} / mile", sec_to_string(sec_m));
 }
 
 #[derive(PartialEq)]
@@ -53,7 +93,7 @@ impl fmt::Display for DistUnit {
 }
 
 // Seconds to human readable string
-fn sec_to_string(sec: f32) -> String {
+fn sec_to_string(sec: f64) -> String {
     let mut out = String::new();
     let mut rest = sec;
     let mut h = 0.0;
@@ -105,7 +145,7 @@ impl Distance {
             Distance::FiveK => "5k",
         }
     }
-    fn km(&self) -> f32 {
+    fn km(&self) -> f64 {
         match self {
             Distance::FiftyK => 50.0,
             Distance::Marathon => 42.2,
@@ -117,7 +157,7 @@ impl Distance {
 }
 
 // pace is in seconds per km
-fn get_distances(pace: f32) -> HashMap<Distance, f32> {
+fn get_distances(pace: f64) -> HashMap<Distance, f64> {
     let mut m = HashMap::new();
     for di in Distance::all() {
         let time = di.km() * pace;
@@ -127,7 +167,7 @@ fn get_distances(pace: f32) -> HashMap<Distance, f32> {
 }
 
 // pace is in seconds per km
-fn display_distances(pace: f32) {
+fn display_distances(pace: f64) {
     let mut m = get_distances(pace);
     println!("At that pace:");
     for di in Distance::all() {
@@ -136,8 +176,45 @@ fn display_distances(pace: f32) {
     }
 }
 
-fn convert_to_per_km(per_mile: f32) -> f32 {
+fn convert_to_per_km(per_mile: f64) -> f64 {
     per_mile * 0.62137119223733
+}
+
+fn t_to_sec(t: &str) -> u32 {
+    let mut rest = String::from(t);
+    let mut secs: u32 = 0;
+    if rest.contains(":") {
+        let parts: Vec<&str> = rest.split(":").collect();
+        if parts.len() != 2 {
+            // TODO: return error
+            println!("{} invalid format, expected e.g. '7:30'", t);
+            return 0;
+        }
+        let min: u32 = parts[0].parse().unwrap();
+        let sec: u32 = parts[1].parse().unwrap();
+        return min * 60 + sec;
+    }
+    if rest.contains("h") {
+        let sp: Vec<&str> = rest.split("h").collect();
+        let hours: u32 = sp[0].parse().unwrap();
+        secs += hours * 3600;
+        rest = String::from(sp[1]);
+    }
+    if rest.contains("m") {
+        let sp: Vec<&str> = rest.split("m").collect();
+        let mins: u32 = sp[0].parse().unwrap();
+        secs += mins * 60;
+        rest = String::from(sp[1]);
+    }
+    if rest.contains("s") {
+        // final s is optional
+        let sp: Vec<&str> = rest.split("s").collect();
+        rest = String::from(sp[0]);
+    }
+    if rest.len() > 0 {
+        secs += rest.parse::<u32>().unwrap();
+    }
+    secs
 }
 
 // p is running page, format min:sec[m|k].
@@ -151,10 +228,7 @@ fn do_pace(p: &str) {
             return;
         }
     };
-    let parts: Vec<&str> = p[0..p.len() - 1].split(":").collect();
-    let min: f32 = parts[0].parse().unwrap();
-    let mut sec: f32 = parts[1].parse().unwrap();
-    sec += min * 60.0;
+    let mut sec = f64::from(t_to_sec(&p[0..p.len() - 1]));
     if du == DistUnit::Miles {
         sec = convert_to_per_km(sec); // because all the distances are in km
     }
@@ -196,5 +270,19 @@ mod tests {
         let d = get_distances(three_hour_marathon);
         let m_time = *d.get(&Distance::Marathon).unwrap();
         assert_eq!(m_time.floor(), 3.0 * 3600.0 + 3.0);
+    }
+
+    #[test]
+    fn test_parse_time() {
+        // seconds
+        assert_eq!(t_to_sec("1s"), 1);
+        // minutes
+        assert_eq!(t_to_sec("10m"), 600);
+        // hours
+        assert_eq!(t_to_sec("1h"), 3600);
+        // all
+        assert_eq!(t_to_sec("1h01m01"), 3600 + 60 + 1);
+        // with colon for minutes
+        assert_eq!(t_to_sec("1:01"), 61);
     }
 }
